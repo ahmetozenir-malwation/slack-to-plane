@@ -2,8 +2,6 @@
 
 Slack `/plane` slash command → self-hosted Plane API bridge. Lets Slack users create Plane issues via a modal without exposing Plane's IP-restricted API.
 
-See `docs/superpowers/specs/2026-05-15-slack-plane-bridge-design.md` for the full design.
-
 ## Architecture
 
 - `slack-plane-bridge` — Node 20 + Bolt service handling Slack webhooks
