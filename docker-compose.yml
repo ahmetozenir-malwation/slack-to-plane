@@ -1,0 +1,60 @@
+# Single compose file — works both locally and on the Plane host.
+#
+# Local:
+#   docker network create plane_default   # once, throwaway (bridge talks to Plane via PLANE_API_BASE)
+#   docker compose up --build
+#   # run the tunnel separately:  cloudflared tunnel --url http://localhost:9292 --protocol http2
+#
+# Plane host (joins Plane's existing stack + starts the tunnel):
+#   docker compose --profile tunnel up -d --build
+#
+# Environment-specific values come from .env:
+#   - Local:  PLANE_API_BASE=http://plane.example.com
+#   - Host:   PLANE_API_BASE=http://plane-api:8000
+
+services:
+  slack-plane-bridge:
+    build:
+      context: .
+    image: slack-plane-bridge:latest
+    restart: unless-stopped
+    ports:
+      - "9292:9292"
+    env_file:
+      - .env
+    environment:
+      # Force the SQLite file onto the mounted volume, regardless of .env.
+      - DB_PATH=/data/bridge.db
+      - PORT=9292
+    volumes:
+      - ./data:/data
+    networks:
+      - plane_default
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9292/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Only starts with `--profile tunnel` (i.e. on the Plane host).
+  # Locally, run `cloudflared tunnel --url http://localhost:9292` by hand instead.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - plane_default
+    depends_on:
+      - slack-plane-bridge
+    profiles:
+      - tunnel
+
+networks:
+  # External: created by Plane's stack on the host; on a dev machine create a
+  # throwaway one with `docker network create plane_default`.
+  plane_default:
+    external: true
+    name: plane_default
